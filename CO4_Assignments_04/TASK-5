@@ -29,3 +29,24 @@ def write_reports(summary,streaks): print("percent:",summary,"three-day absences
 def main(folder):
     rows=read_rows(find_daily_files(folder)); write_reports(percentage(rows),absent_three_days(rows))
 if __name__ == "__main__": main("attendance_data")
+B Utility module plus main
+# attendance_utils.py contains the four functions above
+# main.py
+import attendance_utils as au
+if __name__ == "__main__":
+    rows=au.read_rows(find_daily_files())
+    au.write_reports(au.percentage(rows), au.absent_three_days(rows))
+C Three modules
+attendance_app/reader.py   # read_rows
+attendance_app/stats.py    # percentage, absent_three_days
+attendance_app/report.py   # write_reports
+# main.py imports these functions and calls the pipeline
+D Package
+attendance/__init__.py
+attendance/reader.py
+attendance/stats.py
+attendance/report.py
+main.py
+# import attendance.stats
+# from attendance import stats
+# from attendance.stats import percentage
