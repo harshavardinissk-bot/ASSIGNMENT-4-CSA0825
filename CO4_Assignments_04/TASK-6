@@ -1,0 +1,60 @@
+Package layout and flow
+fest_processor/__init__.py
+fest_processor/reader.py      # parse and load records
+fest_processor/validation.py  # email and required-field checks
+fest_processor/registry.py    # de-duplicate and group by event
+fest_processor/reports.py     # event, summary, error outputs
+main.py
+Flow: files -> parse -> validate -> deduplicate -> group -> output CSVs
+from pathlib import Path
+import csv
+def valid_email(email):
+    if " " in email or email.count("@")!=1: return False
+    local,domain=email.split("@")
+    return bool(local and domain and "." in domain and not domain.startswith(".") and not domain.endswith("."))
+def parse_line(line):
+    f=[x.strip() for x in line.rstrip("\r\n").split(",")]
+    if len(f)!=5: raise ValueError("expected 5 fields")
+    reg,name,dept,email,event_text=f
+    if not reg or not name or not dept: raise ValueError("required field missing")
+    if not valid_email(email): raise ValueError(f"invalid email {email!r}")
+    events=[x.strip() for x in event_text.split(";") if x.strip()]
+    if not events: raise ValueError("no events")
+    return dict(register=reg,name=name,department=dept,email=email,events=events)
+def run(input_dir,output_dir,departments):
+    src=Path(input_dir); dst=Path(output_dir); dst.mkdir(parents=True,exist_ok=True)
+    seen=set(); master={}; groups={}; errors=[]
+    for dept in departments:
+        path=src/f"{dept}.csv"
+        try:
+            with path.open(encoding="utf-8") as f:
+                for n,line in enumerate(f,1):
+                    if not line.strip(): continue
+                    try: r=parse_line(line)
+                    except ValueError as e: errors.append((path.name,n,line.rstrip(),str(e))); continue
+                    if r["register"] in seen:
+                        errors.append((path.name,n,line.rstrip(),"duplicate register number")); continue
+                    seen.add(r["register"]); master[r["register"]]=r
+                    for event in r["events"]: groups.setdefault(event,[]).append(r)
+        except OSError as e: errors.append((path.name,0,"",type(e).__name__+": "+str(e)))
+    for event,records in sorted(groups.items()):
+        with (dst/f"{event}.csv").open("w",encoding="utf-8",newline="") as f:
+            w=csv.writer(f); w.writerow(["register","name","department","email"])
+            for r in records: w.writerow([r["register"],r["name"],r["department"],r["email"]])
+    with (dst/"summary.csv").open("w",encoding="utf-8",newline="") as f:
+        w=csv.writer(f); w.writerow(["metric","count"]); w.writerow(["accepted",len(master)])
+        for event,records in sorted(groups.items()): w.writerow([event,len(records)])
+    with (dst/"errors.csv").open("w",encoding="utf-8",newline="") as f:
+        w=csv.writer(f); w.writerow(["file","line","raw","reason"]); w.writerows(errors)
+    return master,groups,errors
+if __name__=="__main__":
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        root=Path(tmp); src=root/"in"; dst=root/"out"; src.mkdir()
+        (src/"Arts.csv").write_text("1001,Asha,Arts,asha@example.edu,Music;Drama\n1001,Asha,Arts,asha@example.edu,Music\n1002,Bala,Arts,bad-email,Drama\nDAMAGED\n",encoding="utf-8")
+        (src/"Science.csv").write_text("2001,Chen,Science,chen@example.edu,Robotics\n",encoding="utf-8")
+        master,groups,errors=run(src,dst,["Arts","Science","Commerce","Law","Design"])
+        print("accepted:",sorted(master))
+        print("events:",{k:sorted(r["register"] for r in v) for k,v in sorted(groups.items())})
+        print("errors:",[(e[0],e[1],e[3]) for e in errors])
+        print((dst/"summary.csv").read_text(encoding="utf-8"))
