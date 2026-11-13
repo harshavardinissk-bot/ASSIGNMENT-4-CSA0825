@@ -1,0 +1,23 @@
+class InvalidRecord(Exception): pass
+def parse_line(line):
+    parts=[x.strip() for x in line.strip().split(",")]
+    if len(parts)!=3: raise InvalidRecord(f"expected 3 fields, found {len(parts)}")
+    reg,date,status=parts
+    if not reg or not date: raise InvalidRecord("empty register/date")
+    if status not in {"P","A"}: raise InvalidRecord(f"invalid status {status!r}")
+    return reg,date,status
+def summarise(path):
+    present=absent=0; errors=[]
+    try:
+        with open(path,encoding="utf-8") as f:
+            for n,line in enumerate(f,1):
+                try: _,_,status=parse_line(line)
+                except InvalidRecord as exc: errors.append((n,str(exc)))
+                else:
+                    if status=="P": present+=1
+                    else: absent+=1
+    except FileNotFoundError as exc: raise OSError(f"missing {path}") from exc
+    except PermissionError as exc: raise OSError(f"denied {path}") from exc
+    except UnicodeDecodeError as exc: raise OSError(f"bad encoding {path}") from exc
+    finally: pass # with closes the file; cleanup/metrics may go here
+    return present,absent,errors
