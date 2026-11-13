@@ -1,0 +1,17 @@
+from pathlib import Path
+import tempfile
+def process(day_file,log_path,error_path):
+    try:
+        with open(day_file,encoding="utf-8") as f: books=[x.rstrip("\r\n") for x in f if x.strip()]
+        with open(log_path,"a",encoding="utf-8") as f:
+            for book in books: f.write(book+"\n")
+    except OSError as exc:
+        with open(error_path,"a",encoding="utf-8") as f: f.write(f"{day_file}: {type(exc).__name__}: {exc}\n")
+        return False
+    return True
+with tempfile.TemporaryDirectory() as folder:
+    root=Path(folder); log=root/"returns.log"; err=root/"errors.log"
+    for i,books in enumerate([["Book A","Book B"],["Book C"],["Book D"]],1):
+        src=root/f"day{i}.txt"; src.write_text("\n".join(books),encoding="utf-8"); process(src,log,err)
+    print(log.read_text(encoding="utf-8"),end="")
+    print("missing handled:",process(root/"missing.txt",log,err))
