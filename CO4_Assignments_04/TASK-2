@@ -1,0 +1,26 @@
+from pathlib import Path
+import csv
+def summarize_month(folder,out):
+    folder=Path(folder); out=Path(out); out.mkdir(parents=True,exist_ok=True)
+    counts={}; rejects=[]
+    for path in sorted(folder.glob("*.csv")):
+        with path.open(encoding="utf-8",newline="") as f:
+            for n,line in enumerate(f,1):
+                try:
+                    parts=[x.strip() for x in line.strip().split(",")]
+                    if len(parts)!=3: raise ValueError("expected 3 fields")
+                    reg,date,status=parts
+                    if not reg or not date or status not in {"P","A"}: raise ValueError("invalid row")
+                except ValueError as exc:
+                    rejects.append((path.name,n,line.rstrip(),str(exc))); continue
+                x=counts.setdefault(reg,[0,0]); x[1]+=1
+                if status=="P": x[0]+=1
+    rows=[(r,p,t,f"{100*p/t:.2f}") for r,(p,t) in sorted(counts.items())]
+    def write(name,header,data):
+        with (out/name).open("w",encoding="utf-8",newline="") as f:
+            w=csv.writer(f); w.writerow(header); w.writerows(data)
+    header=["register","present","valid_days","percent"]
+    write("attendance_summary.csv",header,rows)
+    write("below_75.csv",header,[r for r in rows if float(r[3])<75])
+    write("damaged_records.csv",["file","line","raw","reason"],rejects)
+    return rows,rejects
