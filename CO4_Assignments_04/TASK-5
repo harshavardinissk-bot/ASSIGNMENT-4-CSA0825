@@ -1,0 +1,31 @@
+# attendance_all.py; the same function bodies can be moved into modules.
+from pathlib import Path
+from datetime import date,timedelta
+def find_daily_files(folder): return sorted(Path(folder).glob("*.csv"))
+def read_rows(paths):
+    rows=[]
+    for path in paths:
+        with open(path,encoding="utf-8") as f:
+            for line in f:
+                parts=[x.strip() for x in line.split(",")]
+                if len(parts)==3 and parts[2] in {"P","A"}: rows.append(tuple(parts))
+    return rows
+def percentage(rows):
+    counts={}
+    for reg,day,status in rows:
+        x=counts.setdefault(reg,[0,0]); x[1]+=1
+        if status=="P": x[0]+=1
+    return {r:100*p/n for r,(p,n) in counts.items()}
+def absent_three_days(rows):
+    by_student={}
+    for reg,day,status in rows: by_student.setdefault(reg,{})[date.fromisoformat(day)]=status
+    result=[]
+    for reg,days in by_student.items():
+        for day in days:
+            if all(days.get(day+timedelta(i))=="A" for i in range(3)):
+                result.append((reg,day.isoformat())); break
+    return result
+def write_reports(summary,streaks): print("percent:",summary,"three-day absences:",streaks)
+def main(folder):
+    rows=read_rows(find_daily_files(folder)); write_reports(percentage(rows),absent_three_days(rows))
+if __name__ == "__main__": main("attendance_data")
